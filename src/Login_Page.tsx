@@ -1,6 +1,6 @@
 import { LoginForm } from "@/components/login-form" 
 
-export function App() {
+export function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center p-6">
       
@@ -14,6 +14,7 @@ export function App() {
 
     </div>
   )
+
  }
 
-export default App
+export default LoginPage
