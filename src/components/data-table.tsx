@@ -138,11 +138,11 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     enableHiding: false,
   },
 
-  { //Department Column
+  { //ID Column
     accessorKey: "id",
     header: "ID",
     cell: ({ row }) => (
-      <div className="w-32">
+      <div className="w-16">
         <Badge variant="outline" className="px-1.5 text-muted-foreground">
           {row.original.id}
         </Badge>
@@ -178,7 +178,7 @@ const columns: ColumnDef<z.infer<typeof schema>>[] = [
     accessorKey: "salary",
     header: "Salary",
     cell: ({ row }) => (
-      <div className="w-32">
+      <div className="w-12">
         <Badge variant="outline" className="px-1.5 text-muted-foreground">
           {row.original.salary}
         </Badge>

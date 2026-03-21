@@ -1,7 +1,7 @@
-import * as React from "react"
-import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
-import { NavUser } from "@/components/nav-user"
+﻿import * as React from 'react'
+import { NavMain } from '@/components/nav-main'
+import { NavSecondary } from '@/components/nav-secondary'
+import { NavUser } from '@/components/nav-user'
 import {
   Sidebar,
   SidebarContent,
@@ -10,19 +10,19 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { LayoutDashboardIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from "lucide-react"
+} from '@/components/ui/sidebar'
+import { LayoutDashboardIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from 'lucide-react'
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
+    name: 'shadcn',
+    email: 'm@example.com',
+    avatar: '/avatars/shadcn.jpg',
   },
   navMain: [
     {
-      title: "Dashboard",
-      url: "#",
+      title: 'Dashboard',
+      url: '#',
       icon: (
         <LayoutDashboardIcon
         />
@@ -31,65 +31,65 @@ const data = {
   ],
   navClouds: [
     {
-      title: "Capture",
+      title: 'Capture',
       icon: (
         <CameraIcon
         />
       ),
       isActive: true,
-      url: "#",
+      url: '#',
       items: [
         {
-          title: "Active Proposals",
-          url: "#",
+          title: 'Active Proposals',
+          url: '#',
         },
         {
-          title: "Archived",
-          url: "#",
+          title: 'Archived',
+          url: '#',
         },
       ],
     },
     {
-      title: "Proposal",
+      title: 'Proposal',
       icon: (
         <FileTextIcon
         />
       ),
-      url: "#",
+      url: '#',
       items: [
         {
-          title: "Active Proposals",
-          url: "#",
+          title: 'Active Proposals',
+          url: '#',
         },
         {
-          title: "Archived",
-          url: "#",
+          title: 'Archived',
+          url: '#',
         },
       ],
     },
     {
-      title: "Prompts",
+      title: 'Prompts',
       icon: (
         <FileTextIcon
         />
       ),
-      url: "#",
+      url: '#',
       items: [
         {
-          title: "Active Proposals",
-          url: "#",
+          title: 'Active Proposals',
+          url: '#',
         },
         {
-          title: "Archived",
-          url: "#",
+          title: 'Archived',
+          url: '#',
         },
       ],
     },
   ],
   navSecondary: [
     {
-      title: "Settings",
-      url: "#",
+      title: 'Settings',
+      url: '#',
       icon: (
         <Settings2Icon
         />
@@ -98,19 +98,23 @@ const data = {
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  onLogout?: () => void
+}
+
+export function AppSidebar({ onLogout, ...props }: AppSidebarProps) {
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible='offcanvas' {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
+              className='data-[slot=sidebar-menu-button]:p-1.5!'
             >
-              <a href="#">
-                <CommandIcon className="size-5!" />
-                <span className="text-base font-semibold">WSAT</span>
+              <a href='#'>
+                <CommandIcon className='size-5!' />
+                <span className='text-base font-semibold'>WSAT</span>
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -119,10 +123,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         <NavMain items={data.navMain} />
         
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavSecondary items={data.navSecondary} className='mt-auto' />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={data.user} onLogout={onLogout} />
       </SidebarFooter>
     </Sidebar>
   )
