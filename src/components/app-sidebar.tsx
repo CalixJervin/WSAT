@@ -13,19 +13,18 @@ import {
 } from '@/components/ui/sidebar'
 import { LayoutDashboardIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from 'lucide-react'
 
+// 1. Import your Supabase client
+// (Assuming your supabaseClient.ts is in the src folder, one level up from components)
+import { supabase } from '../supabaseClient'
+
+// Note: I removed the hardcoded 'user' object from here since we are fetching it dynamically!
 const data = {
-  user: {
-    name: 'shadcn',
-    email: 'm@example.com',
-    avatar: '/avatars/shadcn.jpg',
-  },
   navMain: [
     {
       title: 'Dashboard',
       url: '#',
       icon: (
-        <LayoutDashboardIcon
-        />
+        <LayoutDashboardIcon />
       ),
     },
   ],
@@ -33,56 +32,35 @@ const data = {
     {
       title: 'Capture',
       icon: (
-        <CameraIcon
-        />
+        <CameraIcon />
       ),
       isActive: true,
       url: '#',
       items: [
-        {
-          title: 'Active Proposals',
-          url: '#',
-        },
-        {
-          title: 'Archived',
-          url: '#',
-        },
+        { title: 'Active Proposals', url: '#' },
+        { title: 'Archived', url: '#' },
       ],
     },
     {
       title: 'Proposal',
       icon: (
-        <FileTextIcon
-        />
+        <FileTextIcon />
       ),
       url: '#',
       items: [
-        {
-          title: 'Active Proposals',
-          url: '#',
-        },
-        {
-          title: 'Archived',
-          url: '#',
-        },
+        { title: 'Active Proposals', url: '#' },
+        { title: 'Archived', url: '#' },
       ],
     },
     {
       title: 'Prompts',
       icon: (
-        <FileTextIcon
-        />
+        <FileTextIcon />
       ),
       url: '#',
       items: [
-        {
-          title: 'Active Proposals',
-          url: '#',
-        },
-        {
-          title: 'Archived',
-          url: '#',
-        },
+        { title: 'Active Proposals', url: '#' },
+        { title: 'Archived', url: '#' },
       ],
     },
   ],
@@ -91,8 +69,7 @@ const data = {
       title: 'Settings',
       url: '#',
       icon: (
-        <Settings2Icon
-        />
+        <Settings2Icon />
       ),
     },
   ],
@@ -103,6 +80,31 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function AppSidebar({ onLogout, ...props }: AppSidebarProps) {
+  
+  // 2. Create state for the logged-in user
+  const [sessionUser, setSessionUser] = React.useState({
+    name: 'Loading...',
+    email: '...',
+    avatar: '',
+  })
+
+  // 3. Fetch the active user from Supabase when the sidebar loads
+  React.useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (user && user.email) {
+        setSessionUser({
+          name: user.email.split('@')[0], // Uses the part before @ as the name
+          email: user.email,
+          avatar: '', // Shadcn will generate initials automatically
+        })
+      }
+    }
+
+    fetchUser()
+  }, [])
+
   return (
     <Sidebar collapsible='offcanvas' {...props}>
       <SidebarHeader>
@@ -122,11 +124,11 @@ export function AppSidebar({ onLogout, ...props }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        
         <NavSecondary items={data.navSecondary} className='mt-auto' />
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} onLogout={onLogout} />
+        {/* 4. Pass the dynamic sessionUser instead of the static data.user */}
+        <NavUser user={sessionUser} onLogout={onLogout} />
       </SidebarFooter>
     </Sidebar>
   )
