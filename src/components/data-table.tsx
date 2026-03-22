@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import {
   closestCenter,
@@ -33,20 +35,12 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table"
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts"
 import { toast } from "sonner"
 import { z } from "zod"
 
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Drawer,
   DrawerClose,
@@ -87,27 +81,26 @@ import {
 import {
   Tabs,
   TabsContent,
-  TabsList,
-  TabsTrigger,
 } from "@/components/ui/tabs"
-import { GripVerticalIcon, CircleCheckIcon, LoaderIcon, EllipsisVerticalIcon, Columns3Icon, ChevronDownIcon, PlusIcon, ChevronsLeftIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsRightIcon, TrendingUpIcon } from "lucide-react"
+import { GripVerticalIcon, EllipsisVerticalIcon, Columns3Icon, ChevronDownIcon, PlusIcon, ChevronsLeftIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsRightIcon } from "lucide-react"
+
+// 1. IMPORT SUPABASE
+import { supabase } from "../supabaseClient"
 
 export const schema = z.object({
   id: z.number(),
   name: z.string(), 
   department: z.string(), 
   position: z.string(),
-  salary: z.string(),
+  salary: z.any(), // Changed to any to handle DB numbers easily
   address: z.string(),
   email: z.string(),
 })
 
-// Create a separate component for the drag handle
-function DragHandle({ id }: { id: number }) {
-  const { attributes, listeners } = useSortable({
-    id,
-  })
+type Employee = z.infer<typeof schema>
 
+function DragHandle({ id }: { id: number }) {
+  const { attributes, listeners } = useSortable({ id })
   return (
     <Button
       {...attributes}
@@ -122,122 +115,7 @@ function DragHandle({ id }: { id: number }) {
   )
 }
 
-const columns: ColumnDef<z.infer<typeof schema>>[] = [
-  { //ID Num sana
-    id: "drag",
-    header: () => null,
-    cell: ({ row }) => <DragHandle id={row.original.id} />,
-  },
-  
-  { // Name Column
-    accessorKey: "name",
-    header: "Name",
-    cell: ({ row }) => {
-      return <TableCellViewer item={row.original} />
-    },
-    enableHiding: false,
-  },
-
-  { //ID Column
-    accessorKey: "id",
-    header: "ID",
-    cell: ({ row }) => (
-      <div className="w-16">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.id}
-        </Badge>
-      </div>
-    ),
-  },
-  
-  { //Department Column
-    accessorKey: "department",
-    header: "Department",
-    cell: ({ row }) => (
-      <div className="w-32">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.department}
-        </Badge>
-      </div>
-    ),
-  },
-
-  { //Position Column
-    accessorKey: "position",
-    header: "Position",
-    cell: ({ row }) => (
-      <div className="w-32">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.position}
-        </Badge>
-      </div>
-    ),
-  },
-
-  { //Salary Column
-    accessorKey: "salary",
-    header: "Salary",
-    cell: ({ row }) => (
-      <div className="w-12">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.salary}
-        </Badge>
-      </div>
-    ),
-  },
-
-  { //Address Column
-    accessorKey: "address",
-    header: "Address",
-    cell: ({ row }) => (
-      <div className="w-32">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.address}
-        </Badge>
-      </div>
-    ),
-  },
-
-  { //Email Column
-    accessorKey: "email",
-    header: "Email",
-    cell: ({ row }) => (
-      <div className="w-32">
-        <Badge variant="outline" className="px-1.5 text-muted-foreground">
-          {row.original.email}
-        </Badge>
-      </div>
-    ),
-  },
-  
-  {
-    id: "actions",
-    cell: () => (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            className="flex size-8 text-muted-foreground data-[state=open]:bg-muted"
-            size="icon"
-          >
-            <EllipsisVerticalIcon
-            />
-            <span className="sr-only">Open menu</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-32">
-          <DropdownMenuItem>Edit</DropdownMenuItem>
-          <DropdownMenuItem>Make a copy</DropdownMenuItem>
-          <DropdownMenuItem>Favorite</DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive">Delete</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    ),
-  },
-]
-
-function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
+function DraggableRow({ row }: { row: Row<Employee> }) {
   const { transform, transition, setNodeRef, isDragging } = useSortable({
     id: row.original.id,
   })
@@ -262,18 +140,183 @@ function DraggableRow({ row }: { row: Row<z.infer<typeof schema>> }) {
   )
 }
 
+// --- ADD EMPLOYEE DRAWER ---
+function AddEmployeeDrawer({ onDataChange }: { onDataChange: () => void }) {
+  const isMobile = useIsMobile()
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  
+  const [formData, setFormData] = React.useState({
+    name: "", department: "", position: "", salary: "", address: "", email: ""
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    
+    const { error } = await supabase.from('employees').insert([formData])
+    
+    setIsLoading(false)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Employee added successfully!")
+      setIsOpen(false)
+      onDataChange()
+      // Reset form
+      setFormData({ name: "", department: "", position: "", salary: "", address: "", email: "" })
+    }
+  }
+
+  return (
+    <Drawer open={isOpen} onOpenChange={setIsOpen} direction={isMobile ? "bottom" : "right"}>
+      <DrawerTrigger asChild>
+        <Button variant="default" size="sm">
+          <PlusIcon className="mr-2 h-4 w-4" />
+          <span className="hidden lg:inline">Add Employee</span>
+        </Button>
+      </DrawerTrigger>
+      <DrawerContent className="h-[90vh] sm:h-full sm:w-[400px] mt-24">
+        <DrawerHeader>
+          <DrawerTitle>Add New Employee</DrawerTitle>
+          <DrawerDescription>Fill in the details to add a new team member.</DrawerDescription>
+        </DrawerHeader>
+        
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4 px-4 overflow-y-auto">
+          <div className="flex flex-col gap-2">
+            <Label>Name</Label>
+            <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Department</Label>
+            <Input required value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Position</Label>
+            <Input required value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Salary</Label>
+            <Input required type="number" value={formData.salary} onChange={e => setFormData({...formData, salary: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Email</Label>
+            <Input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Address</Label>
+            <Input required value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+          </div>
+
+          <DrawerFooter className="px-0 pt-4">
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Saving..." : "Save Employee"}
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </form>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+// --- EDIT EMPLOYEE DRAWER (Replaces the dummy chart viewer) ---
+function EditEmployeeDrawer({ item, onDataChange }: { item: Employee, onDataChange: () => void }) {
+  const isMobile = useIsMobile()
+  const [isOpen, setIsOpen] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [formData, setFormData] = React.useState(item)
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    
+    const { id, ...updateData } = formData // Remove ID so we don't try to overwrite it
+    const { error } = await supabase.from('employees').update(updateData).eq('id', item.id)
+    
+    setIsLoading(false)
+    if (error) {
+      toast.error(error.message)
+    } else {
+      toast.success("Employee updated!")
+      setIsOpen(false)
+      onDataChange()
+    }
+  }
+
+  return (
+    <Drawer open={isOpen} onOpenChange={setIsOpen} direction={isMobile ? "bottom" : "right"}>
+      <DrawerTrigger asChild>
+        <Button variant="link" className="w-fit px-0 text-left text-foreground font-semibold">
+          {item.name}
+        </Button>
+      </DrawerTrigger>
+      <DrawerContent className="h-[90vh] sm:h-full sm:w-[400px] mt-24">
+        <DrawerHeader>
+          <DrawerTitle>Edit Employee</DrawerTitle>
+          <DrawerDescription>Update details for {item.name}</DrawerDescription>
+        </DrawerHeader>
+        
+        <form onSubmit={handleUpdate} className="flex flex-col gap-4 px-4 overflow-y-auto">
+          <div className="flex flex-col gap-2">
+            <Label>Name</Label>
+            <Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Department</Label>
+            <Input value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Position</Label>
+            <Input value={formData.position} onChange={e => setFormData({...formData, position: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Salary</Label>
+            <Input type="number" value={formData.salary} onChange={e => setFormData({...formData, salary: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Email</Label>
+            <Input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Address</Label>
+            <Input value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} />
+          </div>
+
+          <DrawerFooter className="px-0 pt-4">
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Updating..." : "Update Employee"}
+            </Button>
+            <DrawerClose asChild>
+              <Button variant="outline" type="button">Cancel</Button>
+            </DrawerClose>
+          </DrawerFooter>
+        </form>
+      </DrawerContent>
+    </Drawer>
+  )
+}
+
+// 2. Add onDataChange to the props
 export function DataTable({
   data: initialData,
+  onDataChange,
 }: {
-  data: z.infer<typeof schema>[]
+  data: Employee[]
+  onDataChange: () => void 
 }) {
   const [data, setData] = React.useState(() => initialData)
+
+  // 3. Keep local data synced with the database data
+  React.useEffect(() => {
+    setData(initialData)
+  }, [initialData])
+
   const [rowSelection, setRowSelection] = React.useState({})
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({})
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
-  )
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
@@ -291,16 +334,104 @@ export function DataTable({
     [data]
   )
 
+  // 4. Moved columns inside so it can access handleDelete and onDataChange
+  const handleDelete = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this employee?")) return;
+
+    const { error } = await supabase.from('employees').delete().eq('id', id)
+    if (error) {
+      toast.error("Failed to delete employee.")
+    } else {
+      toast.success("Employee deleted.")
+      onDataChange()
+    }
+  }
+
+  const columns: ColumnDef<Employee>[] = React.useMemo(() => [
+    {
+      id: "drag",
+      header: () => null,
+      cell: ({ row }) => <DragHandle id={row.original.id} />,
+    },
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => <EditEmployeeDrawer item={row.original} onDataChange={onDataChange} />,
+      enableHiding: false,
+    },
+    {
+      accessorKey: "id",
+      header: "ID",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">{row.original.id}</Badge>
+      ),
+    },
+    {
+      accessorKey: "department",
+      header: "Department",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">{row.original.department}</Badge>
+      ),
+    },
+    {
+      accessorKey: "position",
+      header: "Position",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">{row.original.position}</Badge>
+      ),
+    },
+    {
+      accessorKey: "salary",
+      header: "Salary",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">${row.original.salary}</Badge>
+      ),
+    },
+    {
+      accessorKey: "address",
+      header: "Address",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">{row.original.address}</Badge>
+      ),
+    },
+    {
+      accessorKey: "email",
+      header: "Email",
+      cell: ({ row }) => (
+        <Badge variant="outline" className="px-1.5 text-muted-foreground">{row.original.email}</Badge>
+      ),
+    },
+    {
+      id: "actions",
+      cell: ({ row }) => (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="flex size-8 p-0">
+              <EllipsisVerticalIcon className="size-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-32">
+            <DropdownMenuItem onClick={() => navigator.clipboard.writeText(row.original.email)}>
+              Copy Email
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem 
+              className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50"
+              onClick={() => handleDelete(row.original.id)}
+            >
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ),
+    },
+  ], [onDataChange])
+
   const table = useReactTable({
     data,
     columns,
-    state: {
-      sorting,
-      columnVisibility,
-      rowSelection,
-      columnFilters,
-      pagination,
-    },
+    state: { sorting, columnVisibility, rowSelection, columnFilters, pagination },
     getRowId: (row) => row.id.toString(),
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
@@ -328,403 +459,98 @@ export function DataTable({
   }
 
   return (
-    <Tabs
-      defaultValue="outline"
-      className="w-full flex-col justify-start gap-6"
-    >
+    <Tabs defaultValue="outline" className="w-full flex-col justify-start gap-6">
       <div className="flex items-center justify-between px-4 lg:px-6">
-        <Label htmlFor="view-selector" className="sr-only">
-          View
-        </Label>
-        <Select defaultValue="outline">
-          <SelectTrigger
-            className="flex w-fit @4xl/main:hidden"
-            size="sm"
-            id="view-selector"
-          >
-            <SelectValue placeholder="Select a view" />
-          </SelectTrigger>
-          
-        </Select>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                <Columns3Icon data-icon="inline-start" />
+                <Columns3Icon className="mr-2 h-4 w-4" />
                 Columns
-                <ChevronDownIcon data-icon="inline-end" />
+                <ChevronDownIcon className="ml-2 h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-32">
-              {table
-                .getAllColumns()
-                .filter(
-                  (column) =>
-                    typeof column.accessorFn !== "undefined" &&
-                    column.getCanHide()
-                )
-                .map((column) => {
-                  return (
-                    <DropdownMenuCheckboxItem
-                      key={column.id}
-                      className="capitalize"
-                      checked={column.getIsVisible()}
-                      onCheckedChange={(value) =>
-                        column.toggleVisibility(!!value)
-                      }
-                    >
-                      {column.id}
-                    </DropdownMenuCheckboxItem>
-                  )
-                })}
+              {table.getAllColumns().filter((col) => typeof col.accessorFn !== "undefined" && col.getCanHide()).map((column) => (
+                <DropdownMenuCheckboxItem
+                  key={column.id}
+                  className="capitalize"
+                  checked={column.getIsVisible()}
+                  onCheckedChange={(val) => column.toggleVisibility(!!val)}
+                >
+                  {column.id}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm">
-            <PlusIcon
-            />
-            <span className="hidden lg:inline">Add Section</span>
-          </Button>
+          
+          {/* 5. The Add Employee Button / Drawer */}
+          <AddEmployeeDrawer onDataChange={onDataChange} />
+          
         </div>
       </div>
-      <TabsContent
-        value="outline"
-        className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
-      >
+      
+      <TabsContent value="outline" className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
         <div className="overflow-hidden rounded-lg border">
-          <DndContext
-            collisionDetection={closestCenter}
-            modifiers={[restrictToVerticalAxis]}
-            onDragEnd={handleDragEnd}
-            sensors={sensors}
-            id={sortableId}
-          >
+          <DndContext collisionDetection={closestCenter} modifiers={[restrictToVerticalAxis]} onDragEnd={handleDragEnd} sensors={sensors} id={sortableId}>
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-muted">
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      return (
-                        <TableHead key={header.id} colSpan={header.colSpan}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
-                      )
-                    })}
+                    {headerGroup.headers.map((header) => (
+                      <TableHead key={header.id} colSpan={header.colSpan}>
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
                   </TableRow>
                 ))}
               </TableHeader>
               <TableBody className="**:data-[slot=table-cell]:first:w-8">
                 {table.getRowModel().rows?.length ? (
-                  <SortableContext
-                    items={dataIds}
-                    strategy={verticalListSortingStrategy}
-                  >
+                  <SortableContext items={dataIds} strategy={verticalListSortingStrategy}>
                     {table.getRowModel().rows.map((row) => (
                       <DraggableRow key={row.id} row={row} />
                     ))}
                   </SortableContext>
                 ) : (
                   <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No results.
-                    </TableCell>
+                    <TableCell colSpan={columns.length} className="h-24 text-center">No results.</TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </DndContext>
         </div>
+
+        {/* Pagination Controls */}
         <div className="flex items-center justify-between px-4">
           <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
-            {table.getFilteredSelectedRowModel().rows.length} of{" "}
-            {table.getFilteredRowModel().rows.length} row(s) selected.
+            {table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s) selected.
           </div>
           <div className="flex w-full items-center gap-8 lg:w-fit">
             <div className="hidden items-center gap-2 lg:flex">
-              <Label htmlFor="rows-per-page" className="text-sm font-medium">
-                Rows per page
-              </Label>
-              <Select
-                value={`${table.getState().pagination.pageSize}`}
-                onValueChange={(value) => {
-                  table.setPageSize(Number(value))
-                }}
-              >
-                <SelectTrigger size="sm" className="w-20" id="rows-per-page">
-                  <SelectValue
-                    placeholder={table.getState().pagination.pageSize}
-                  />
-                </SelectTrigger>
+              <Label htmlFor="rows-per-page" className="text-sm font-medium">Rows per page</Label>
+              <Select value={`${table.getState().pagination.pageSize}`} onValueChange={(val) => table.setPageSize(Number(val))}>
+                <SelectTrigger size="sm" className="w-20"><SelectValue placeholder={table.getState().pagination.pageSize} /></SelectTrigger>
                 <SelectContent side="top">
-                  <SelectGroup>
-                    {[10, 20, 30, 40, 50].map((pageSize) => (
-                      <SelectItem key={pageSize} value={`${pageSize}`}>
-                        {pageSize}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
+                  {[10, 20, 30, 40, 50].map((pageSize) => (
+                    <SelectItem key={pageSize} value={`${pageSize}`}>{pageSize}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex w-fit items-center justify-center text-sm font-medium">
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {table.getPageCount()}
+              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
             </div>
             <div className="ml-auto flex items-center gap-2 lg:ml-0">
-              <Button
-                variant="outline"
-                className="hidden h-8 w-8 p-0 lg:flex"
-                onClick={() => table.setPageIndex(0)}
-                disabled={!table.getCanPreviousPage()}
-              >
-                <span className="sr-only">Go to first page</span>
-                <ChevronsLeftIcon
-                />
-              </Button>
-              <Button
-                variant="outline"
-                className="size-8"
-                size="icon"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                <span className="sr-only">Go to previous page</span>
-                <ChevronLeftIcon
-                />
-              </Button>
-              <Button
-                variant="outline"
-                className="size-8"
-                size="icon"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                <span className="sr-only">Go to next page</span>
-                <ChevronRightIcon
-                />
-              </Button>
-              <Button
-                variant="outline"
-                className="hidden size-8 lg:flex"
-                size="icon"
-                onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-                disabled={!table.getCanNextPage()}
-              >
-                <span className="sr-only">Go to last page</span>
-                <ChevronsRightIcon
-                />
-              </Button>
+              <Button variant="outline" className="hidden size-8 lg:flex" size="icon" onClick={() => table.setPageIndex(0)} disabled={!table.getCanPreviousPage()}><ChevronsLeftIcon /></Button>
+              <Button variant="outline" className="size-8" size="icon" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}><ChevronLeftIcon /></Button>
+              <Button variant="outline" className="size-8" size="icon" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}><ChevronRightIcon /></Button>
+              <Button variant="outline" className="hidden size-8 lg:flex" size="icon" onClick={() => table.setPageIndex(table.getPageCount() - 1)} disabled={!table.getCanNextPage()}><ChevronsRightIcon /></Button>
             </div>
           </div>
         </div>
       </TabsContent>
-      <TabsContent
-        value="past-performance"
-        className="flex flex-col px-4 lg:px-6"
-      >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent value="key-personnel" className="flex flex-col px-4 lg:px-6">
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
-      <TabsContent
-        value="focus-documents"
-        className="flex flex-col px-4 lg:px-6"
-      >
-        <div className="aspect-video w-full flex-1 rounded-lg border border-dashed"></div>
-      </TabsContent>
     </Tabs>
-  )
-}
-
-const chartData = [
-  { month: "January", desktop: 186, mobile: 80 },
-  { month: "February", desktop: 305, mobile: 200 },
-  { month: "March", desktop: 237, mobile: 120 },
-  { month: "April", desktop: 73, mobile: 190 },
-  { month: "May", desktop: 209, mobile: 130 },
-  { month: "June", desktop: 214, mobile: 140 },
-]
-
-const chartConfig = {
-  desktop: {
-    label: "Desktop",
-    color: "var(--primary)",
-  },
-  mobile: {
-    label: "Mobile",
-    color: "var(--primary)",
-  },
-} satisfies ChartConfig
-
-function TableCellViewer({ item }: { item: z.infer<typeof schema> }) {
-  const isMobile = useIsMobile()
-
-  return (
-    <Drawer direction={isMobile ? "bottom" : "right"}>
-      <DrawerTrigger asChild>
-        <Button variant="link" className="w-fit px-0 text-left text-foreground">
-          {item.name}
-        </Button>
-      </DrawerTrigger>
-      <DrawerContent>
-        <DrawerHeader className="gap-1">
-          <DrawerTitle>{item.name}</DrawerTitle>
-          <DrawerDescription>
-            Showing total visitors for the last 6 months
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className="flex flex-col gap-4 overflow-y-auto px-4 text-sm">
-          {!isMobile && (
-            <>
-              <ChartContainer config={chartConfig}>
-                <AreaChart
-                  accessibilityLayer
-                  data={chartData}
-                  margin={{
-                    left: 0,
-                    right: 10,
-                  }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => value.slice(0, 3)}
-                    hide
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dot" />}
-                  />
-                  <Area
-                    dataKey="mobile"
-                    type="natural"
-                    fill="var(--color-mobile)"
-                    fillOpacity={0.6}
-                    stroke="var(--color-mobile)"
-                    stackId="a"
-                  />
-                  <Area
-                    dataKey="desktop"
-                    type="natural"
-                    fill="var(--color-desktop)"
-                    fillOpacity={0.4}
-                    stroke="var(--color-desktop)"
-                    stackId="a"
-                  />
-                </AreaChart>
-              </ChartContainer>
-              <Separator />
-              <div className="grid gap-2">
-                <div className="flex gap-2 leading-none font-medium">
-                  Trending up by 5.2% this month{" "}
-                  <TrendingUpIcon className="size-4" />
-                </div>
-                <div className="text-muted-foreground">
-                  Showing total visitors for the last 6 months. This is just
-                  some random text to test the layout. It spans multiple lines
-                  and should wrap around.
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
-          <form className="flex flex-col gap-4">
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="header">Header</Label>
-              <Input id="header" defaultValue={item.name} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="type">Type</Label>
-                <Select defaultValue={item.department}>
-                  <SelectTrigger id="type" className="w-full">
-                    <SelectValue placeholder="Select a type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="Table of Contents">
-                        Table of Contents
-                      </SelectItem>
-                      <SelectItem value="Executive Summary">
-                        Executive Summary
-                      </SelectItem>
-                      <SelectItem value="Technical Approach">
-                        Technical Approach
-                      </SelectItem>
-                      <SelectItem value="Design">Design</SelectItem>
-                      <SelectItem value="Capabilities">Capabilities</SelectItem>
-                      <SelectItem value="Focus Documents">
-                        Focus Documents
-                      </SelectItem>
-                      <SelectItem value="Narrative">Narrative</SelectItem>
-                      <SelectItem value="Cover Page">Cover Page</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="status">Status</Label>
-                <Select defaultValue={item.position}>
-                  <SelectTrigger id="status" className="w-full">
-                    <SelectValue placeholder="Select a status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="Done">Done</SelectItem>
-                      <SelectItem value="In Progress">In Progress</SelectItem>
-                      <SelectItem value="Not Started">Not Started</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="target">Target</Label>
-                <Input id="target" defaultValue={item.name} />
-              </div>
-              <div className="flex flex-col gap-3">
-                <Label htmlFor="limit">Limit</Label>
-                <Input id="limit" defaultValue={item.name} />
-              </div>
-            </div>
-            <div className="flex flex-col gap-3">
-              <Label htmlFor="reviewer">Reviewer</Label>
-              <Select defaultValue={item.email}>
-                <SelectTrigger id="reviewer" className="w-full">
-                  <SelectValue placeholder="Select a reviewer" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value="Eddie Lake">Eddie Lake</SelectItem>
-                    <SelectItem value="Jamik Tashpulatov">
-                      Jamik Tashpulatov
-                    </SelectItem>
-                    <SelectItem value="Emily Whalen">Emily Whalen</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </div>
-          </form>
-        </div>
-        <DrawerFooter>
-          <Button>Submit</Button>
-          <DrawerClose asChild>
-            <Button variant="outline">Done</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
   )
 }
