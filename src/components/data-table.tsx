@@ -69,7 +69,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -82,9 +81,8 @@ import {
   Tabs,
   TabsContent,
 } from "@/components/ui/tabs"
-import { GripVerticalIcon, EllipsisVerticalIcon, Columns3Icon, ChevronDownIcon, PlusIcon, ChevronsLeftIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsRightIcon } from "lucide-react"
+import { GripVerticalIcon, EllipsisVerticalIcon, Columns3Icon, ChevronDownIcon, PlusIcon, ChevronsLeftIcon, ChevronLeftIcon, ChevronRightIcon, ChevronsRightIcon, SearchIcon } from "lucide-react"
 
-// 1. IMPORT SUPABASE
 import { supabase } from "../supabaseClient"
 
 export const schema = z.object({
@@ -92,7 +90,7 @@ export const schema = z.object({
   name: z.string(), 
   department: z.string(), 
   position: z.string(),
-  salary: z.any(), // Changed to any to handle DB numbers easily
+  salary: z.any(), 
   address: z.string(),
   email: z.string(),
 })
@@ -140,7 +138,6 @@ function DraggableRow({ row }: { row: Row<Employee> }) {
   )
 }
 
-// --- ADD EMPLOYEE DRAWER ---
 function AddEmployeeDrawer({ onDataChange }: { onDataChange: () => void }) {
   const isMobile = useIsMobile()
   const [isOpen, setIsOpen] = React.useState(false)
@@ -163,7 +160,6 @@ function AddEmployeeDrawer({ onDataChange }: { onDataChange: () => void }) {
       toast.success("Employee added successfully!")
       setIsOpen(false)
       onDataChange()
-      // Reset form
       setFormData({ name: "", department: "", position: "", salary: "", address: "", email: "" })
     }
   }
@@ -222,7 +218,6 @@ function AddEmployeeDrawer({ onDataChange }: { onDataChange: () => void }) {
   )
 }
 
-// --- EDIT EMPLOYEE DRAWER (Replaces the dummy chart viewer) ---
 function EditEmployeeDrawer({ item, onDataChange }: { item: Employee, onDataChange: () => void }) {
   const isMobile = useIsMobile()
   const [isOpen, setIsOpen] = React.useState(false)
@@ -233,7 +228,7 @@ function EditEmployeeDrawer({ item, onDataChange }: { item: Employee, onDataChan
     e.preventDefault()
     setIsLoading(true)
     
-    const { id, ...updateData } = formData // Remove ID so we don't try to overwrite it
+    const { id, ...updateData } = formData 
     const { error } = await supabase.from('employees').update(updateData).eq('id', item.id)
     
     setIsLoading(false)
@@ -299,7 +294,6 @@ function EditEmployeeDrawer({ item, onDataChange }: { item: Employee, onDataChan
   )
 }
 
-// 2. Add onDataChange to the props
 export function DataTable({
   data: initialData,
   onDataChange,
@@ -309,7 +303,6 @@ export function DataTable({
 }) {
   const [data, setData] = React.useState(() => initialData)
 
-  // 3. Keep local data synced with the database data
   React.useEffect(() => {
     setData(initialData)
   }, [initialData])
@@ -322,6 +315,12 @@ export function DataTable({
     pageIndex: 0,
     pageSize: 10,
   })
+  
+  // --- NEW STATE FOR THE DELETE MODAL ---
+  const [employeeToDelete, setEmployeeToDelete] = React.useState<number | null>(null)
+  const [isDeleting, setIsDeleting] = React.useState(false)
+  // --------------------------------------
+
   const sortableId = React.useId()
   const sensors = useSensors(
     useSensor(MouseSensor, {}),
@@ -334,18 +333,23 @@ export function DataTable({
     [data]
   )
 
-  // 4. Moved columns inside so it can access handleDelete and onDataChange
-  const handleDelete = async (id: number) => {
-    if (!window.confirm("Are you sure you want to delete this employee?")) return;
+  // --- UPDATED DELETE FUNCTION ---
+  const confirmDelete = async () => {
+    if (employeeToDelete === null) return
 
-    const { error } = await supabase.from('employees').delete().eq('id', id)
+    setIsDeleting(true)
+    const { error } = await supabase.from('employees').delete().eq('id', employeeToDelete)
+    setIsDeleting(false)
+
     if (error) {
       toast.error("Failed to delete employee.")
     } else {
       toast.success("Employee deleted.")
+      setEmployeeToDelete(null) // Close the modal on success
       onDataChange()
     }
   }
+  // -------------------------------
 
   const columns: ColumnDef<Employee>[] = React.useMemo(() => [
     {
@@ -416,9 +420,10 @@ export function DataTable({
               Copy Email
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            {/* UPDATED: We now just set the ID to trigger the modal instead of window.confirm */}
             <DropdownMenuItem 
-              className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50"
-              onClick={() => handleDelete(row.original.id)}
+              className="text-red-500 cursor-pointer focus:text-red-500 focus:bg-red-500/10"
+              onClick={() => setEmployeeToDelete(row.original.id)}
             >
               Delete
             </DropdownMenuItem>
@@ -459,8 +464,50 @@ export function DataTable({
   }
 
   return (
-    <Tabs defaultValue="outline" className="w-full flex-col justify-start gap-6">
-      <div className="flex items-center justify-between px-4 lg:px-6">
+    <Tabs defaultValue="outline" className="w-full flex-col justify-start gap-6 relative">
+      
+      {/* --- NEW DELETE CONFIRMATION MODAL --- */}
+      {employeeToDelete !== null && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-xl shadow-lg w-full max-w-md p-6 mx-4 animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-semibold text-card-foreground">Are you absolutely sure?</h2>
+            <p className="text-sm text-muted-foreground mt-2">
+              This action cannot be undone. This will permanently delete this employee from your database.
+            </p>
+            <div className="flex justify-end gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setEmployeeToDelete(null)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? "Deleting..." : "Delete Employee"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ------------------------------------- */}
+
+      <div className="flex items-center justify-between px-4 lg:px-6 mb-2">
+        <div className="flex items-center w-full max-w-sm relative">
+          <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees by name..."
+            value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
+            onChange={(event) =>
+              table.getColumn("name")?.setFilterValue(event.target.value)
+            }
+            className="pl-8 w-full"
+          />
+        </div>
+
         <div className="flex items-center gap-2 ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -484,9 +531,7 @@ export function DataTable({
             </DropdownMenuContent>
           </DropdownMenu>
           
-          {/* 5. The Add Employee Button / Drawer */}
           <AddEmployeeDrawer onDataChange={onDataChange} />
-          
         </div>
       </div>
       
@@ -522,7 +567,6 @@ export function DataTable({
           </DndContext>
         </div>
 
-        {/* Pagination Controls */}
         <div className="flex items-center justify-between px-4">
           <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
             {table.getFilteredSelectedRowModel().rows.length} of {table.getFilteredRowModel().rows.length} row(s) selected.

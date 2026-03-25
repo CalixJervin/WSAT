@@ -8,6 +8,9 @@ import { ThemeProvider } from '@/components/theme-provider.tsx'
 import { TooltipProvider } from '@/components/ui/tooltip.tsx'
 import { supabase } from './supabaseClient'
 
+// Import the Toaster for our pop-up notifications
+import { Toaster } from 'sonner'
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [isInitializing, setIsInitializing] = useState(true)
@@ -71,6 +74,16 @@ function App() {
         ) : (
           <LoginPage onLogin={handleLogin} onSignUp={handleSignUp} />
         )}
+        
+        {/* Styled to perfectly match your dark mode dashboard cards */}
+        <Toaster 
+          position="top-right" 
+          theme="dark"
+          toastOptions={{
+            className: "border border-border bg-card text-card-foreground rounded-xl shadow-lg px-4 py-3 font-sans",
+          }}
+        />
+        
       </TooltipProvider>
     </ThemeProvider>
   )
